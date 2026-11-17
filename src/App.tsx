@@ -258,6 +258,11 @@ export default function App() {
     }
   };
 
+  const handleAttachLocalVideo = (file: File) => {
+    const localVideoUrl = URL.createObjectURL(file);
+    setSourceMeta((prev) => (prev ? { ...prev, localVideoUrl } : null));
+  };
+
   const handleUpdateClip = (updated: GeneratedClip) => {
     setClips((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
   };
@@ -294,6 +299,7 @@ export default function App() {
             publishQueue={publishQueue}
             oauthFeedback={oauthFeedback}
             onUpdateClip={handleUpdateClip}
+            onAttachLocalVideo={handleAttachLocalVideo}
             onBackToIngest={() => handleNavigateLanding('hero-ingest')}
             onConnectProvider={handleConnectProvider}
             onDisconnectProvider={handleDisconnectProvider}

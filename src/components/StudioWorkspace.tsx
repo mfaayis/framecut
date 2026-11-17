@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
+  AlertTriangle,
   ArrowLeft,
   CalendarClock,
   Check,
@@ -16,6 +17,9 @@ import {
   RotateCcw,
   Send,
   Trash2,
+  Upload,
+  Video,
+  X,
   Youtube,
 } from 'lucide-react';
 import {
@@ -43,6 +47,7 @@ interface StudioWorkspaceProps {
   publishQueue: PublishJob[];
   oauthFeedback: string | null;
   onUpdateClip: (updated: GeneratedClip) => void;
+  onAttachLocalVideo?: (file: File) => void;
   onBackToIngest: () => void;
   onConnectProvider: (provider: 'youtube' | 'instagram') => void;
   onDisconnectProvider: (provider: 'youtube' | 'instagram') => void;
@@ -56,6 +61,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
   publishQueue,
   oauthFeedback,
   onUpdateClip,
+  onAttachLocalVideo,
   onBackToIngest,
   onConnectProvider,
   onDisconnectProvider,
@@ -128,6 +134,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fallbackImgRef = useRef<HTMLImageElement | null>(null);
+  const attachFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [relativeTime, setRelativeTime] = useState(0);
@@ -137,6 +144,15 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledDateTime, setScheduledDateTime] = useState('');
   const [youtubePrivacy, setYoutubePrivacy] = useState<'public' | 'unlisted' | 'private'>('public');
+  const [showMissingVideoModal, setShowMissingVideoModal] = useState(false);
+
+  const handleFileAttached = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onAttachLocalVideo) {
+      onAttachLocalVideo(file);
+      setStudioNotice({ type: 'ok', text: `Attached "${file.name}". Real video motion & audio are now active!` });
+    }
+  };
 
   // Load fallback image if no local video binary (e.g., YouTube URL mode)
   useEffect(() => {
@@ -248,8 +264,12 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
     }
   };
 
-  const handleExportCurrentClip = async () => {
+  const handleExportCurrentClip = async (allowStillSlide = false) => {
     if (!selectedClip || exportProgress !== null) return;
+    if (!sourceMeta.localVideoUrl && !allowStillSlide) {
+      setShowMissingVideoModal(true);
+      return;
+    }
     setStudioNotice(null);
     setExportProgress(0);
     try {
@@ -502,6 +522,15 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
         />
       )}
 
+      {/* Hidden file input for attaching real source video */}
+      <input
+        type="file"
+        ref={attachFileInputRef}
+        accept="video/*"
+        className="hidden"
+        onChange={handleFileAttached}
+      />
+
       {/* Contextual Studio Top Bar */}
       <div className="border-b border-white/[0.08] bg-[#070709] px-6 py-3 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -522,6 +551,17 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          {!sourceMeta.localVideoUrl && (
+            <button
+              type="button"
+              onClick={() => attachFileInputRef.current?.click()}
+              className="px-3.5 py-2 text-xs font-semibold text-black bg-amber-400 hover:bg-amber-300 rounded-full cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Attach Video for Full Motion</span>
+            </button>
+          )}
+
           {exportProgress !== null && (
             <span className="text-xs font-mono-tabular text-amber-400">
               Rendering 9:16 · {exportProgress}%
@@ -530,7 +570,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
           <button
             type="button"
             disabled={exportProgress !== null}
-            onClick={handleExportCurrentClip}
+            onClick={() => handleExportCurrentClip(false)}
             className="glass-btn-primary px-4 py-2 text-xs font-semibold rounded-full disabled:opacity-50 cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
             {exportProgress !== null ? (
@@ -542,6 +582,25 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
           </button>
         </div>
       </div>
+
+      {/* YouTube Preview Notice Banner */}
+      {!sourceMeta.localVideoUrl && (
+        <div className="bg-amber-950/40 border-b border-amber-500/30 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-200">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>YouTube Metadata Mode:</strong> Viral segments and synced subtitles are ready! To render <strong>real moving footage with sound</strong> (like IShowSpeed &amp; GTA reaction Shorts), attach your video file.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => attachFileInputRef.current?.click()}
+            className="underline font-semibold hover:text-white cursor-pointer"
+          >
+            Attach Video (.mp4 / .webm) →
+          </button>
+        </div>
+      )}
 
       {/* Main 3-Column Studio Workspace */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0">
@@ -1270,6 +1329,62 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
           </div>
         </aside>
       </div>
+
+      {/* Missing Video Notice Modal */}
+      {showMissingVideoModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4"
+        >
+          <div className="w-full max-w-md bg-[#0D0D10] border border-amber-400/40 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 text-amber-400">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="text-base font-semibold text-white">Attach Video for Full Motion</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMissingVideoModal(false)}
+                className="text-neutral-400 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-300 leading-relaxed">
+              You analyzed this clip from a YouTube URL. Because browsers cannot directly scrape full raw video streams from YouTube, exporting right now would only produce a <strong>still thumbnail image</strong>.
+            </p>
+            <div className="bg-amber-950/30 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-200">
+              To get a <strong>real moving video clip with audio and reaction cuts</strong> (like in viral YouTube Shorts &amp; Reels), attach your video file (.mp4 or .webm).
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMissingVideoModal(false);
+                  attachFileInputRef.current?.click();
+                }}
+                className="w-full sm:flex-1 py-2.5 px-4 text-xs font-semibold text-black bg-amber-400 hover:bg-amber-300 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Attach Video (.mp4 / .webm)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMissingVideoModal(false);
+                  handleExportCurrentClip(true);
+                }}
+                className="w-full sm:w-auto py-2.5 px-3 text-xs text-neutral-400 hover:text-neutral-200 cursor-pointer"
+              >
+                Export Still Slide Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

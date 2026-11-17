@@ -332,22 +332,42 @@ function drawSubtitleCue(
         ctx.fill();
       }
 
-      if (style === 'bold_impact' || style === 'neon_kinetic') {
-        ctx.lineWidth = Math.max(4, Math.round(fontSize * 0.22));
+      if (isCurrent && (style === 'bold_impact' || style === 'neon_kinetic')) {
+        ctx.save();
+        const centerX = cursorX + wWidth / 2;
+        const centerY = ly;
+        ctx.translate(centerX, centerY);
+        ctx.scale(1.1, 1.1);
+        ctx.translate(-centerX, -centerY);
+
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = Math.max(5, Math.round(fontSize * 0.26));
         ctx.strokeStyle = '#000000';
         ctx.lineJoin = 'round';
         ctx.strokeText(item.word, cursorX, ly);
-      }
 
-      if (style === 'karaoke_pill' && isCurrent) {
-        ctx.fillStyle = '#000000';
-      } else if (isCurrent || isEmphasis) {
-        ctx.fillStyle = '#F59E0B';
+        ctx.fillStyle = '#FFE600';
+        ctx.fillText(item.word, cursorX, ly);
+        ctx.restore();
       } else {
-        ctx.fillStyle = '#FFFFFF';
-      }
+        if (style === 'bold_impact' || style === 'neon_kinetic') {
+          ctx.lineWidth = Math.max(4, Math.round(fontSize * 0.22));
+          ctx.strokeStyle = '#000000';
+          ctx.lineJoin = 'round';
+          ctx.strokeText(item.word, cursorX, ly);
+        }
 
-      ctx.fillText(item.word, cursorX, ly);
+        if (style === 'karaoke_pill' && isCurrent) {
+          ctx.fillStyle = '#000000';
+        } else if (isCurrent || isEmphasis) {
+          ctx.fillStyle = '#FFE600';
+        } else {
+          ctx.fillStyle = '#FFFFFF';
+        }
+
+        ctx.fillText(item.word, cursorX, ly);
+      }
       cursorX += wWidth + (idxInLine < line.length - 1 ? spaceW : 0);
     });
   });

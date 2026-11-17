@@ -192,6 +192,11 @@ export const LandingView: React.FC<LandingViewProps> = ({
 
           {/* Generation Options Row */}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-neutral-400">
+            <span className="text-amber-400/90 font-medium flex items-center gap-1.5">
+              <span>★</span>
+              <span>Upload Video or Record Live Capture for full moving 9:16 clips with sound</span>
+            </span>
+            <span aria-hidden="true" className="text-neutral-700">·</span>
             <label className="flex items-center gap-2">
               <span>Clips per video</span>
               <select
