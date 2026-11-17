@@ -11,3 +11,5 @@ coverage/
 !.env.example
 .vercel/
 bun.lock
+
+.vercel
