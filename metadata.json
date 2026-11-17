@@ -1,0 +1,6 @@
+{
+  "name": "FrameCut",
+  "description": "AI video clipping studio that turns YouTube videos, uploaded footage, and live streams into vertical Instagram Reels and YouTube Shorts with optimized subtitles, dynamic layout templates, and direct automated publishing.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

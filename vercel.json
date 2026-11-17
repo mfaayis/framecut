@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/api/analyze-url", "destination": "/api/analyze-url" },
+    { "source": "/api/analyze-video", "destination": "/api/analyze-video" },
+    { "source": "/api/accounts", "destination": "/api/accounts" },
+    { "source": "/api/oauth/:path*", "destination": "/api/oauth/:path*" },
+    { "source": "/api/publish/:path*", "destination": "/api/publish/:path*" },
+    { "source": "/auth/:path*", "destination": "/api/auth/:path*" }
+  ],
+  "functions": {
+    "api/analyze-url.ts": {
+      "maxDuration": 60
+    },
+    "api/analyze-video.ts": {
+      "maxDuration": 120,
+      "memory": 1024
+    }
+  }
+}
