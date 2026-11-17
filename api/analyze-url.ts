@@ -6,7 +6,7 @@ function getGeminiClient(): GoogleGenAI {
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY is not configured.');
   }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey, apiVersion: 'v1beta' });
 }
 
 function extractYouTubeVideoId(url: string): string | null {
