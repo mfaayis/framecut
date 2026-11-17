@@ -49,71 +49,84 @@ async function fetchYouTubeContext(url: string, videoId: string | null) {
   let durationSeconds = 0;
   let transcriptLines: Array<{ start: number; duration: number; text: string }> = [];
 
-  try {
-    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-    const oembedRes = await fetch(oembedUrl, { signal: AbortSignal.timeout(4000) });
-    if (oembedRes.ok) {
-      const data = (await oembedRes.json()) as { title?: string; author_name?: string; thumbnail_url?: string };
-      title = data.title || '';
-      author = data.author_name || '';
-      if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
-    }
-  } catch {
-    // continue
-  }
+  const tasks: Promise<any>[] = [];
 
+  // Task 1: oEmbed (fast, lightweight metadata)
+  tasks.push(
+    (async () => {
+      try {
+        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+        const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(2000) });
+        if (res.ok) {
+          const data = (await res.json()) as { title?: string; author_name?: string; thumbnail_url?: string };
+          if (data.title) title = data.title;
+          if (data.author_name) author = data.author_name;
+          if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
+        }
+      } catch {
+        // non-fatal
+      }
+    })()
+  );
+
+  // Task 2: Watch page (for duration & captions)
   if (videoId) {
-    try {
-      const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-        signal: AbortSignal.timeout(4500),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; FrameCutBot/1.0)',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-      });
-      if (watchRes.ok) {
-        const html = await watchRes.text();
-        const lengthMatch = html.match(/"lengthSeconds":"(\d+)"/);
-        if (lengthMatch) durationSeconds = Number(lengthMatch[1]) || 0;
-        const descMatch = html.match(/"shortDescription":"((?:\\.|[^"\\])*)"/);
-        if (descMatch) {
-          try {
-            description = JSON.parse(`"${descMatch[1]}"`);
-          } catch {
-            description = descMatch[1].replace(/\\n/g, '\n');
-          }
-        }
-        if (!title) {
-          const titleMatch = html.match(/<title>(.*?)<\/title>/);
-          if (titleMatch) title = decodeHtmlEntities(titleMatch[1].replace(/ - YouTube$/, ''));
-        }
-        const captionMatch = html.match(/"captionTracks":(\[.*?\])/);
-        if (captionMatch) {
-          try {
-            const tracks = JSON.parse(captionMatch[1]) as Array<{ baseUrl?: string; languageCode?: string }>;
-            const preferred = tracks.find((t) => t.languageCode?.startsWith('en')) || tracks[0];
-            if (preferred?.baseUrl) {
-              const capRes = await fetch(preferred.baseUrl, { signal: AbortSignal.timeout(4000) });
-              if (capRes.ok) {
-                const xml = await capRes.text();
-                const regex = /<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g;
-                let m: RegExpExecArray | null;
-                while ((m = regex.exec(xml)) !== null) {
-                  const text = decodeHtmlEntities(m[3]);
-                  if (text) transcriptLines.push({ start: Number(m[1]), duration: Number(m[2]), text });
-                }
+    tasks.push(
+      (async () => {
+        try {
+          const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+            signal: AbortSignal.timeout(2500),
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept-Language': 'en-US,en;q=0.9',
+            },
+          });
+          if (watchRes.ok) {
+            const html = await watchRes.text();
+            const lengthMatch = html.match(/"lengthSeconds":"(\d+)"/);
+            if (lengthMatch) durationSeconds = Number(lengthMatch[1]) || 0;
+            const descMatch = html.match(/"shortDescription":"((?:\\.|[^"\\])*)"/);
+            if (descMatch) {
+              try {
+                description = JSON.parse(`"${descMatch[1]}"`);
+              } catch {
+                description = descMatch[1].replace(/\\n/g, '\n');
               }
             }
-          } catch {
-            // ignore
+            if (!title) {
+              const titleMatch = html.match(/<title>(.*?)<\/title>/);
+              if (titleMatch) title = decodeHtmlEntities(titleMatch[1].replace(/ - YouTube$/, ''));
+            }
+            const captionMatch = html.match(/"captionTracks":(\[.*?\])/);
+            if (captionMatch) {
+              try {
+                const tracks = JSON.parse(captionMatch[1]) as Array<{ baseUrl?: string; languageCode?: string }>;
+                const preferred = tracks.find((t) => t.languageCode?.startsWith('en')) || tracks[0];
+                if (preferred?.baseUrl) {
+                  const capRes = await fetch(preferred.baseUrl, { signal: AbortSignal.timeout(1500) });
+                  if (capRes.ok) {
+                    const xml = await capRes.text();
+                    const regex = /<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g;
+                    let m: RegExpExecArray | null;
+                    while ((m = regex.exec(xml)) !== null) {
+                      const text = decodeHtmlEntities(m[3]);
+                      if (text) transcriptLines.push({ start: Number(m[1]), duration: Number(m[2]), text });
+                    }
+                  }
+                }
+              } catch {
+                // ignore
+              }
+            }
           }
+        } catch {
+          // ignore
         }
-      }
-    } catch {
-      // ignore
-    }
+      })()
+    );
   }
 
+  await Promise.allSettled(tasks);
   return { title, author, description, thumbnailUrl, durationSeconds, transcriptLines };
 }
 
@@ -240,7 +253,7 @@ function normalizeClips(rawClips: any[], maxDuration: number) {
 }
 
 async function generateStructuredClipsWithRetry(ai: GoogleGenAI, contents: any, schema: any) {
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  const modelsToTry = ['gemini-2.5-flash'];
   let lastError: any = null;
   for (const model of modelsToTry) {
     try {
@@ -250,6 +263,7 @@ async function generateStructuredClipsWithRetry(ai: GoogleGenAI, contents: any, 
         config: {
           responseMimeType: 'application/json',
           responseSchema: schema,
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
     } catch (err: any) {

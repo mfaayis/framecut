@@ -287,7 +287,7 @@ async function generateStructuredClipsWithRetry(
   contents: any,
   schema: any
 ) {
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  const modelsToTry = ['gemini-2.5-flash'];
   let lastError: any = null;
 
   for (const model of modelsToTry) {
@@ -298,6 +298,7 @@ async function generateStructuredClipsWithRetry(
         config: {
           responseMimeType: 'application/json',
           responseSchema: schema,
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
     } catch (err: any) {
