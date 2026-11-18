@@ -200,18 +200,16 @@ export default function App() {
       const durationSeconds = await probeVideoDuration(file);
       const localVideoUrl = URL.createObjectURL(file);
 
-      const form = new FormData();
-      form.append('video', file);
-      form.append('clipCount', String(clipCount));
-      form.append('targetPlatform', platform);
-      form.append('sourceType', sourceType);
-      if (durationSeconds > 0) {
-        form.append('durationSeconds', String(durationSeconds));
-      }
-
       const res = await fetch('/api/analyze-video', {
         method: 'POST',
-        body: form,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          durationSeconds: durationSeconds || 60,
+          clipCount,
+          targetPlatform: platform,
+          sourceType,
+        }),
       });
       const data = await parseApiJson(res);
       if (!res.ok) {

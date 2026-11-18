@@ -454,11 +454,58 @@ async function startServer() {
     res.sendFile(fullPath);
   });
 
-  // 1. Analyze uploaded video or recorded live capture using Gemini Files API
+  // 1. Analyze uploaded video or recorded live capture using Gemini
   app.post('/api/analyze-video', upload.single('video'), async (req, res) => {
     const file = req.file;
+
+    // Handle lightweight JSON metadata analysis (avoids 4.5MB payload limits)
+    if (!file && req.body?.fileName) {
+      const fileName = String(req.body.fileName).replace(/\.[^/.]+$/, '');
+      const durationSeconds = Math.max(5, Number(req.body.durationSeconds) || 60);
+      const clipCount = Math.min(8, Math.max(2, Number(req.body.clipCount) || 4));
+      const targetPlatform = String(req.body.targetPlatform || 'both');
+      const sourceLabel = req.body.sourceType === 'livestream' ? 'livestream' : 'upload';
+
+      try {
+        const ai = getGeminiClient();
+        const prompt = `You are an expert short-form viral video editor for YouTube Shorts and Instagram Reels.
+Video: "${fileName}"
+Total Duration: ${durationSeconds.toFixed(1)} seconds
+Target Platform: ${targetPlatform}
+Generate ${clipCount} distinct viral short segments strictly within 0 and ${durationSeconds.toFixed(1)} seconds.
+Provide title, hookHeadline, startTime, endTime, scores, recommendedTemplate (split_screen, auto_reframe, blurred_cinema), subtitleStyle (bold_impact, neon_kinetic), socialCaption, hashtags, reasoning, and synced subtitles.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: clipResponseSchema,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        });
+
+        const parsed = JSON.parse((response.text ?? '{}').trim());
+        const clips = normalizeClips(Array.isArray(parsed.clips) ? parsed.clips : [], durationSeconds);
+
+        res.json({
+          sourceMeta: {
+            sourceType: sourceLabel,
+            title: parsed.videoTitle || fileName,
+            durationSeconds,
+            hasRealTranscript: false,
+          },
+          clips,
+        });
+        return;
+      } catch (err: any) {
+        res.status(500).json({ error: err?.message || 'Failed to analyze video.' });
+        return;
+      }
+    }
+
     if (!file) {
-      res.status(400).json({ error: 'No video file uploaded.' });
+      res.status(400).json({ error: 'No video file or metadata provided.' });
       return;
     }
 
